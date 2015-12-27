@@ -1,4 +1,6 @@
-# ideas
+Ideas
+#####
+
 Collections of half-baked ideas
 
 This repo is a trial setup to see how github works to collect 
