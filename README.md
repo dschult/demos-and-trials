@@ -1,5 +1,5 @@
-Ideas
-=====
+Demos and Trials
+================
 
 This repo is a collection of half-baked ideas
 
