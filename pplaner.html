@@ -1,0 +1,652 @@
+<!DOCTYPE HTML>
+<html>
+    <!-- TODO: mouse-driven shift of origin
+               mouse-driven zoom of axes
+               adaptive time-stepper
+               identify equil
+               identify limit cycle
+               plot x,y vs t on same or new graph 
+               button: to zoom axes in fixed window size
+    -->
+    <head>
+        <meta charset='utf-8'></meta>
+        <title>Playing with SVG in html</title>
+        <style>
+            svg {
+                display: inline;
+                float: left;
+            }
+/*                width: 100%;
+                margin: 0;
+                height: 100%;
+                float: left;
+                preserveAspectRatio: xMinYMin meet;
+            }
+*/            .svg-container {
+                display: inline-block;
+                position: relative;
+                width: 100%;
+                padding-bottom: 0%;
+                vertical-align: middle;
+                overflow: hidden;
+            }
+ /*           .svg-content {
+                display: inline-block;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+ */           h3 {text-align: center; text-decoration: underline;}
+            #legend { float: left; padding-top: 20px;}
+            .fieldgroup {width: 380; float: left;}
+            fieldset { border: none; padding: 5px 0; 
+                display: inline-block;
+                width: 400px;}
+            label: { padding-left: 0;} 
+            label.small { display: inline-block; width: 35px;}
+            input.small { width: 40px;}
+            input[type=range] { width: 100px; padding: 0;}
+            input.medium { width: 310px;} 
+ 
+            .axis line, .axis path { 
+                fill: none;
+                stroke: #bbbbbb;
+                stroke-width: 2px;
+                shape-rendering: crispEdges;
+            }       
+            .axis text {
+                fill: #444;
+                font-size: 11px;
+                font-family: sans-serif;
+            }       
+        </style> 
+    </head>
+<body>
+    <!-- <h3>Phase Planer</h3> -->
+<h3>Planar Vector Field and Trajectories</h3>
+<div id="maindraw" class="svg-container">
+</div>  <!-- end of maindraw -->
+
+<div id="legend">
+    <div class="fieldgroup" style="width:180">
+    <fieldset>
+        <legend>Enter the flow field equations:</legend>
+        <label for="functionx-input">ẋ = </label>
+        <input id="functionx-input" type="text" class="medium"
+                value="y+0.5*x*(1-(x*x+y*y))" 
+                oninput="validateFunctionFX(this);"/>
+                <br></br>
+        <label for="functiony-input">ẏ = </label>
+        <input id="functiony-input" type="text" class="medium"
+                value="-x+0.5*y*(1-(x*x+y*y))"
+                oninput="validateFunctionFY(this);"/>
+                <br></br>
+        <button id="reset-button">Reset</button>
+        <button id="rescale-button">Rescale</button>
+    </fieldset>
+    <fieldset style="padding-top:20px">
+        <label for="xmin-input">xmin: </label>
+        <input id="xmin-input" type="text" class="small smooth" value="-2"/>
+        <label for="xmax-input">xmax: </label>
+        <input id="xmax-input" type="text" class="small smooth" value="2"/>
+        <br></br>
+        <label for="ymin-input">ymin: </label>
+        <input id="ymin-input" type="text" class="small smooth" value="-2"/>
+        <label for="ymax-input">ymax: </label>
+        <input id="ymax-input" type="text" class="small smooth" value="2"/>
+    </fieldset>
+    <fieldset>
+        <button id="zoomin-button">zoom +</button>
+        <button id="zoomout-button">zoom −</button>
+    </fieldset>
+    <!--
+    <fieldset style="padding-top:20px">
+        <label for="numgrid-input" class="small">#</label>
+        <input id="numgrid-input" class="instant" type="range" min="10" max="40"
+               step="1" value="25"/>
+    </fieldset>
+    <fieldset>
+        <label for="numpoints-input"" class="small"">pts</label>
+        <input id="numpoints-input" class="instant" type="range" min="1" max="5"
+               step="0.1" value="3"/>
+    </fieldset>
+    <fieldset>
+        <label for="deltat-input" class="small">∆t</label>
+        <input id="deltat-input" class="instant" type="range" min="1" max="50"
+               step="1" value="25"/>
+    </fieldset>
+    <fieldset style="padding-top:20px">
+        <label for="time-input" class="small">T</label>
+        <input id="time-input" class="instant" type="range" min="1000" max="20000"
+               step="500" value="5000"/>
+    </fieldset>
+--></div> <!-- endof fieldgroup div-->
+</div>  <!-- end of legend div -->
+
+<!-- <script src='http://d3js.org/d3.v3.min.js'></script> -->
+<script src='d3.v3.min.js'></script>
+<script>
+    // data coords
+    //console.log("Just beginning");
+    var axes_info = { xmin:-2, xmax:2, ymin:-2, ymax:2 };
+    var xsize= axes_info.xmax - axes_info.xmin;
+    var ysize= axes_info.ymax - axes_info.ymin;
+    var extent = Math.max( xsize, ysize );
+
+    function load_axes_info() {
+        axes_info.xmin= +d3.select("#xmin-input").node().value,
+        axes_info.xmax= +d3.select("#xmax-input").node().value,
+        axes_info.ymin= +d3.select("#ymin-input").node().value, 
+        axes_info.ymax= +d3.select("#ymax-input").node().value
+        xsize= axes_info.xmax - axes_info.xmin;
+        ysize= axes_info.ymax - axes_info.ymin;
+        extent = Math.max( xsize, ysize );
+        //console.log("axes_info",axes_info);
+        //console.log("extent",extent);
+    };
+
+    // svg coords
+    var margin = {left:40, right:30, top:20, bottom:40};
+    var maxsize= Math.min(600,window.innerWidth - margin.left - margin.right);
+    //console.log(window.innerWidth)
+    //console.log(window.innerHeight)
+    var world_size = {width:maxsize, height:maxsize};
+    //d3.select("window").on("resize",resize_world);
+    window.onresize= resize_world;
+    function resize_world() {
+        //console.log("in resize_world",world_size);
+        var maxsize= Math.min(600,window.innerWidth - margin.left - margin.right);
+        world_size = {width:maxsize, height:maxsize};
+        resize();
+        rescale();
+    }
+
+    var svg= d3.select("#maindraw")
+        .append("svg")
+          .attr("id","mysvg")
+          .attr("xmlns", "http://www.w3.org/2000/svg")
+    var defs= svg.append("defs");
+    defs.append("marker")
+        .attr("id","markerCircle")
+        .attr("markerWidth","8")
+        .attr("markerHeight","8")
+        .attr("refX","5")
+        .attr("refY","5")
+      .append("circle")  //append to marker
+        .attr("cx","5")
+        .attr("cy","5")
+        .attr("r","1.5")
+        .style("stroke","none")
+        .style("fill","#000000");
+    defs.append("marker")
+        .attr("id","markerArrow")
+        .attr("markerWidth","9")
+        .attr("markerHeight","9")
+        .attr("refX","2")
+        .attr("refY","6")
+        .attr("orient","auto")
+      .append("path")   // append to marker
+        .attr("d","M2,3 L2,9 L6,5 L2,3")
+        .style("fill","#000000");
+    defs.append("marker")
+        .attr("id","markerBackArrow")
+        .attr("markerWidth","9")
+        .attr("markerHeight","9")
+        .attr("refX","2")
+        .attr("refY","6")
+        .attr("orient","auto")
+      .append("path")   // append to marker
+        .attr("d","M6,3 L6,9 L2,6 L6,3")
+        .style("fill","#000000");
+        //.attr("d","M2,2 L9,9 L5,5 L9,3")
+    defs.append("clipPath")
+        .attr("id","myclip")
+      .append("rect")
+        .attr("id","mycliprect")
+        .attr("x",0).attr("y",0)
+        .attr("width",world_size.width)
+        .attr("height",world_size.height);
+
+    svg.append("g").attr("id","xaxis").classed("axis",true);
+    svg.append("g").attr("id","yaxis").classed("axis",true);
+
+    var world = svg.append("g")
+        .attr("id","world");
+    var stretchbox = svg.append("g")
+        .attr("id","sbox");
+    stretchbox.append("rect")
+        .attr("width","15").attr("height","15")
+        .style("fill","#999999")
+        .style("stroke","black")
+        .style("opacity",0.5);
+    stretchbox.append("path")
+            .attr('d', "m3,3L9,9")
+            .attr("marker-start", "url(#markerBackArrow)")
+            .attr("marker-end", "url(#markerArrow)")
+            .attr("stroke", "#6666ff")
+            .attr("stroke-width", "1px")
+            .attr("fill", "#000000");
+    world.append("rect")
+        .attr("id", "drawable")
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("pointer-events","fill")
+        .on("click", mouse_add_traj)
+        .style("fill","none")
+        .style("stroke","black");
+    var grid= world.append("g")
+        .attr("id", "grid")
+        .attr("pointer-events","none");
+    var trajs= world.append("g")
+        .attr("clip-path", 'url(#myclip)')
+        .attr("id", "trajs");
+    
+        //.attr("width", world_size.width + margin.left + margin.right)
+        //.attr("height", world_size.height + margin.top + margin.bottom);
+//        .attr("viewBox", margin.left+" "+margin.top+" "+world_size.width+" "+world_size.height)
+//    .on("click", mouse_add_traj)
+//        .attr("preserveAspectRatio", "xMinYMin meet")
+//        .classed("svg-content-responsive", true);
+
+
+    // scaling from one coord to another
+    var xscale, yscale, xscale_inv, yscale_inv;
+    function scale_drawing() {
+        //console.log("scale_drawing",axes_info);
+        xscale= d3.scale.linear()
+                .domain([axes_info.xmin, axes_info.xmax])
+                .range([0,world_size.width]);
+        yscale= d3.scale.linear()
+                .domain([axes_info.ymin, axes_info.ymax])
+                .range([world_size.height,0]);
+        xscale_inv= d3.scale.linear()
+                .range([axes_info.xmin, axes_info.xmax])
+                .domain([0,world_size.width]);
+        yscale_inv= d3.scale.linear()
+                .range([axes_info.ymin, axes_info.ymax])
+                .domain([world_size.height,0]);
+    }
+
+        
+    function draw_axes() {
+        // set up axis functions
+        var xAxis = d3.svg.axis()
+                .scale(xscale)
+                .tickSize(6, 6)
+                .tickPadding(2)
+                .orient("bottom");
+        var yAxis = d3.svg.axis()
+                .scale(yscale)
+                .tickSize(6, 6)
+                .tickPadding(2)
+                .orient("left");
+        // draw axes positioned at zero (could also put on side of plot)
+        xa=d3.select("#xaxis")
+            .attr("transform","translate("+margin.left+","+
+                                        (margin.top+yscale(0))+")")
+            .call(xAxis);
+        //console.log("xaxis:",xa);
+        d3.select("#yaxis")
+            .attr("transform","translate("+(margin.left+xscale(0))+","+
+                                        margin.top+")")
+            .call(yAxis);
+        // This could would put axes on left and bottom of plot
+        //d3.select("#xaxis")
+        //    .attr("transform","translate("+margin.left+","+margin.top+")")
+        //    .call(xAxis);
+        //d3.select("#yaxis")
+        //    .attr("transform","translate("+margin.left+","+margin.top+")")
+        //    .call(yAxis);
+    }
+
+
+
+    // Interactions with user interface
+    // zoom button
+    d3.select("#zoomin-button").on("click", zoomin);
+    d3.select("#zoomout-button").on("click", zoomout);
+    function zoomin() {
+        d3.select("#xmin-input").node().value= 2.0*axes_info.xmin;
+        d3.select("#xmax-input").node().value= 2.0*axes_info.xmax;
+        d3.select("#ymin-input").node().value= 2.0*axes_info.ymin;
+        d3.select("#ymax-input").node().value= 2.0*axes_info.ymax;
+        rescale();
+    }
+    function zoomout(){
+        d3.select("#xmin-input").node().value= 0.5*axes_info.xmin;
+        d3.select("#xmax-input").node().value= 0.5*axes_info.xmax;
+        d3.select("#ymin-input").node().value= 0.5*axes_info.ymin;
+        d3.select("#ymax-input").node().value= 0.5*axes_info.ymax;
+        rescale();
+    }
+    // rebig button
+    //d3.select("#rebigin-button").on("click", rebigin);
+    //d3.select("#rebigout-button").on("click", rebigout);
+    function rebigin() {
+        world_size.width= 2.0*world_size.width;
+        world_size.height= 2.0*world_size.height;
+        resize();
+        rescale();
+    }
+    function rebigout(){
+        world_size.width= 0.5*world_size.width;
+        world_size.height= 0.5*world_size.height;
+        resize();
+        rescale();
+    }
+
+    var drag= d3.behavior.drag();
+    stretchbox.call(drag);
+    drag.on("dragstart",sbox_start);
+    drag.on("drag",sbox_move);
+    drag.on("dragend",sbox_end);
+    var mousedown=0;
+    var ghost;
+    function sbox_start(){ 
+        evt = d3.event;
+        var x= evt.sourceEvent.clientX, y=evt.sourceEvent.clientY;
+        //console.log("Starting point:", x,y, "world_size",world_size);
+        ghost= svg.append("rect").attr("id","ghost")
+            .attr("x",0)
+            .attr("y",0)
+            .attr("width",world.attr("width"))
+            .attr("height",world.attr("height"))
+            .attr("initwidth",x)
+            .attr("initheight",y)
+            .style("fill","none")
+            .style("stroke","black");
+        //console.log("start",ghost.width,svg.attr("width"));
+        }
+    function sbox_move(){
+        evt= d3.event;
+        var dx = (1*ghost.attr("width"))+evt.dx;
+        var dy = (1*ghost.attr("height"))+evt.dy;
+        //console.log("sbox_move:",dx,dy);
+        ghost.attr("width", dx);
+        ghost.attr("height", dy);
+    }
+    function sbox_end(){ 
+        var evt= d3.event;
+        //console.log("end evt",evt.sourceEvent.clientX,evt.sourceEvent.clientY);
+        world_size.width += evt.sourceEvent.clientX - ghost.attr("initwidth");
+        world_size.height += evt.sourceEvent.clientY - ghost.attr("initheight");
+        //console.log("sbox_end size:",world_size);
+        resize();
+        rescale();
+        ghost.remove();
+    }
+    var draggrid = d3.behavior.drag();
+    d3.select("#drawable").call(draggrid);
+    
+    draggrid.on("dragstart",dragg_start);
+    draggrid.on("drag",dragg_move);
+    draggrid.on("dragend",dragg_end);
+    var dragg_initx=0, dragg_inity=0, dragg_x=0, dragg_y=0;
+    function dragg_start() {
+        evt= d3.event;
+        dragg_x= dragg_initx= evt.sourceEvent.clientX;
+        dragg_y= dragg_inity= evt.sourceEvent.clientY;
+    }
+    function dragg_move() {
+        evt= d3.event;
+        var dragg_x= dragg_x + evt.dx;
+        var dragg_y= dragg_y + evt.dy;
+    }
+    function dragg_end() {
+    }
+
+    // reset button
+    d3.select("#reset-button").on("click", rerender);
+    d3.select("#rescale-button").on("click", rescale);
+    function rerender() {
+        //console.log("rerendering",axes_info);
+        grid.selectAll("*").remove();
+        trajs.selectAll("*").remove();
+        load_axes_info();
+        scale_drawing();
+        draw_axes();
+        make_grid_of_arrows();
+    }
+    function rescale() {
+        //console.log("rescaling",axes_info);
+        var circs= [];
+        var xsi= xscale_inv;
+        var ysi= yscale_inv;
+        trajs.selectAll(".circle")
+            .each( function(d,i) {
+                cx= d3.select(this).attr("cx");
+                cy= d3.select(this).attr("cy");
+                circs.push([xsi(cx),ysi(cy)]);
+        });
+        rerender();
+        while (xpt= circs.pop()) {
+        add_traj([ xscale(xpt[0]), yscale(xpt[1]) ]);
+        }
+    }
+
+
+    // get mouse click position
+    function get_mouse_xy(evt) {
+        var dim= evt.target.getBoundingClientRect();
+        //console.log(dim);
+        var x= evt.x - dim.left;
+        var y= evt.y - dim.top;
+        //where_am_i(evt);
+        return [x,y];
+    }
+    function where_am_i(evt) {
+        var e = evt.target
+            dim = e.getBoundingClientRect()
+            xscreen = evt.x - dim.left
+            yscreen = evt.y - dim.top;
+        console.log("You are at",xscreen,yscreen);
+        console.log("Your client coords are",evt.clientX,evt.clientY);
+        console.log("Your bounding rect is",dim);
+        console.log("Your BBox is",e.getBBox());
+        console.log("Your event is",evt);
+        console.log("your x,y coords are:",[evt.x,evt.y]);
+    }
+
+    // flow related functions
+    function flow(xpt) {
+        var x=xpt[0], y=xpt[1]
+        return [fx(x,y), fy(x,y)];
+    }
+    function validateFunctionFX(f) {
+        ftxt = f.value;
+        try { eval("var newf = function(x,y) {return "+ftxt+"}"); newf(1,-1)}
+        catch (e) { 
+            f.style.background = "#FF0000";
+            return;
+        }
+        f.style.background = "#FFFFFF";
+        fx = newf; // global variable fx
+    }
+    function validateFunctionFY(f) {
+        ftxt = f.value;
+        try { eval("var newf = function(x,y) {return "+ftxt+"}"); newf(1,-1)}
+        catch (e) { 
+            f.style.background = "#FF0000";
+            return;
+        }
+        f.style.background = "#FFFFFF";
+        fy = newf; // global variable fy
+    }
+    function check_init_flow_fun() {
+        try {
+        eval("var newfx = function(x,y) {return " + 
+            d3.select("#functionx-input").node().value + "}");
+        eval("var newfy = function(x,y) {return " + 
+            d3.select("#functiony-input").node().value + "}");
+        newfx(1,-1); newfy(1,-1);
+        } catch (e) { console.log("error defining fx and fy"); throw(e); }
+        fx = newfx;  // set 
+        fy = newfy;
+    }
+    check_init_flow_fun();
+
+    // Grid and arrow functions
+    function make_unit(vect) {
+        var vx= vect[0],vy= vect[1];
+        vor= .05/Math.sqrt(vx*vx+vy*vy);
+        return [vx*vor, vy*vor];
+    }
+    function newArrow(xpt) {
+        var x= xpt.x;
+        var y= xpt.y;
+        var dvect= make_unit(flow([x,y]));
+        var bx= xscale(x);
+        var by= yscale(y);
+        var ex= xscale(x+extent*0.20*dvect[0]);
+        var ey= yscale(y+extent*0.20*dvect[1]);
+        path_coords= [{x:bx, y:by}, {x:ex, y:ey}];
+        arrow_maker= d3.svg.line()
+              .x(function(d){return d.x;})
+              .y(function(d){return d.y;})
+              .interpolate("linear");
+        return arrow_maker(path_coords);
+    }
+    function make_grid_of_arrows() {
+        grid.selectAll("*").remove();
+        var ai= axes_info;
+        var data= [];
+        var stepx= (ai.xmax - ai.xmin)/15;
+        var stepy= (ai.ymax - ai.ymin)/15;
+        for (x=ai.xmin+0.5*stepx ; x<ai.xmax ; x +=stepx) {
+            for (y=ai.ymin+0.5*stepy; y<ai.ymax; y +=stepy) {
+                data.push({x:x, y:y});
+        }}
+        grid.selectAll("*").data(data).enter().append("path")
+            .attr('d', newArrow)
+            .attr("marker-start", "url(#markerCircle)")
+            .attr("marker-end", "url(#markerArrow)")
+            .attr("stroke", "#6666ff")
+            .attr("stroke-width", "1px")
+            .attr("fill", "#000000")
+            .attr("class", "arrow");
+    }
+
+    // trajectory functions
+    function mouse_add_traj() {
+        e= d3.event;
+        //console.log("in add_traj",e);
+        var xpt= get_mouse_xy(e);
+        add_traj(xpt);
+    }
+    function add_traj(xpt) {
+        var r= 3;
+        //console.log("xpt",xpt);
+        new_traj_grp= trajs.append("g")
+                .attr("class","traj");
+        new_traj_grp.append("circle")
+            .attr("cx", xpt[0])
+            .attr("cy", xpt[1])
+            .attr("r", r)
+            .attr("class","circle")
+            .attr("pointer-events","all")
+            .on("click", remove_traj)
+            .on("mouseover", highlight_target)
+            .on("mouseout", unhighlight_target)
+            //.attr("onclick", "remove_traj(evt)")
+            .style("stroke","none")
+            .style("fill","green");
+        new_traj_grp.append("path")
+            .property("x", xpt[0])
+            .property("y", xpt[1])
+            .attr("d", forward_odepath)
+            .attr("class","trajpath")
+            .style("stroke","green")
+            .style("stroke-width","1px")
+            .style("fill","none");
+        new_traj_grp.append("path")
+            .property("x", xpt[0])
+            .property("y", xpt[1])
+            .attr("d", backward_odepath)
+            .attr("class","trajpath")
+            .style("stroke","blue")
+            .style("stroke-width","1px")
+            .style("fill","none");
+        }
+    function forward_odepath() {
+        return odepath(this, 0.001);
+    }
+    function backward_odepath() {
+        return odepath(this,-0.001);
+    }
+    function odepath(xpt, dt) {
+        var x= xscale_inv(xpt.x);
+        var y= yscale_inv(xpt.y);
+        var pts= ode_traj(x, y, dt);
+        var traj_maker= d3.svg.line()
+                .x(function(d){return xscale(d[0])})
+                .y(function(d){return yscale(d[1])})
+                .interpolate("linear");
+        return traj_maker(pts);
+    }
+    // TODO implement runge-kutta
+    function ode_traj(x, y, dt) {
+        var pts = [[x,y]];
+        for(i=1; i<100; i++) {
+            for(j=1; j<100; j++) {
+            f= flow([x,y]);
+            x= x + f[0]*dt;
+            y= y + f[1]*dt;
+            } 
+            if (Math.abs(x)+Math.abs(y)<10*extent) {
+            pts.push([x,y]);
+            }
+        }
+        return pts;
+    }
+    function highlight_target() {
+        evt= d3.event;
+        //console.log("mouseover",evt);
+        evt.target.style.stroke='red';
+        evt.target.nextSibling.style.stroke='red';
+        evt.target.nextSibling.nextSibling.style.stroke='red';
+        evt.stopPropagation();
+    }
+    function unhighlight_target() {
+        evt= d3.event;
+        //console.log("mouseout",evt);
+        evt.target.style.stroke='none';
+        evt.target.nextSibling.style.stroke='green';
+        evt.target.nextSibling.nextSibling.style.stroke='blue';
+        evt.stopPropagation();
+    }
+    function remove_traj() {
+        evt= d3.event;
+        //console.log("removing traj",evt);
+        //console.log("removing traj",evt.target);
+        evt.target.parentNode.remove();
+        evt.stopPropagation();
+        //console.log("traj-removed:",trajs.selectAll(".traj"));
+    }
+
+    function resize() { 
+        svg.attr("width", world_size.width + margin.left + margin.right)
+            .attr("height", world_size.height + margin.top + margin.bottom);
+        world.attr("width", world_size.width)
+            .attr("height", world_size.height)
+            .attr("transform", "translate("+margin.left+","+margin.top+")");
+        d3.select("#mycliprect")
+            .attr("width",world_size.width)
+            .attr("height",world_size.height);
+        d3.select("#drawable")
+            .attr("width",world_size.width)
+            .attr("height",world_size.height);
+           //.attr("viewBox", "-40 -20 760 760")
+           //.style("color","white")
+           //.style("border","1px solid #333333")
+        stretchbox.attr("transform", "translate("+
+            (svg.attr("width")-margin.right)+","+
+            (svg.attr("height")-margin.bottom)+")");
+    }
+    resize();
+    rerender();
+    //window.onresize=function() {
+    //    console.log("in windowresize");
+    //    resize_world(); resize(); rescale();} 
+</script>
+    </body>
+</html>
