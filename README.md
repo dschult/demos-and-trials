@@ -17,7 +17,7 @@ how NetworkX does it.
   - create the html files for the docs you want on github.
   - copy them to the gh-pages directory (perhaps removing current 
     contents first)
-  - do basically the following::
+  - do basically the following:
   ```
   cd gh-pages
   git add .
