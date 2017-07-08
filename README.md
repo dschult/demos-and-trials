@@ -18,13 +18,10 @@ how NetworkX does it.
   - copy them to the gh-pages directory (perhaps removing current 
     contents first)
   - do basically the following::
-  
-      cd gh-pages
-      
-      git add .
-      
-      git commit -m "Updating webpages with version x.xx.xx"
-      
-      git push origin gh-pages
-      
+  ```
+  cd gh-pages
+  git add .
+  git commit -m "Updating webpages with version x.xx.xx"
+  git push origin gh-pages
+  ```    
   - the new pages should appear on http://**username**.github.io/**project**
