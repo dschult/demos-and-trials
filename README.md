@@ -20,8 +20,11 @@ how NetworkX does it.
   - do basically the following::
   
       cd gh-pages
+      
       git add .
+      
       git commit -m "Updating webpages with version x.xx.xx"
+      
       git push origin gh-pages
       
   - the new pages should appear on http://**username**.github.io/**project**
